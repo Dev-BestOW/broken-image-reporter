@@ -101,7 +101,8 @@ Returns a disposer that removes the listener and cancels any pending checks. Saf
 | Option | Default | Description |
 | --- | --- | --- |
 | `onError` | — | Called once per unique failing URL, after the record is stored. |
-| `probeHttpStatus` | `true` | Issue a `HEAD` request to recover the status. One extra request per unique failing URL. |
+| `probeHttpStatus` | `true` | Issue a `HEAD` request to recover the status. One extra request per unique failing URL. `false` disables probing entirely, including `probeStatus`. |
+| `probeStatus` | built-in `HEAD` | `(url, signal) => Promise<number \| null>`. Recover the status your own way — see [cross-origin images](#recovering-the-status-of-cross-origin-images). |
 | `probeTimeoutMs` | `5000` | Abandon an unanswered probe after this long, recording `httpStatus: null`. |
 | `verifyDelayMs` | `500` | How long to wait before confirming a failure is real. |
 | `ignore` | — | `(url, element) => boolean`. Return `true` to skip a failure entirely. |
@@ -109,6 +110,52 @@ Returns a disposer that removes the listener and cancels any pending checks. Saf
 | `store` | shared store | Pass a `createBrokenImageStore()` instance to isolate state. |
 
 `data:`, `blob:`, and `about:` URLs are always ignored.
+
+### Recovering the status of cross-origin images
+
+The built-in probe is a browser `fetch`, so it obeys CORS. An image on an origin that sends no `Access-Control-Allow-Origin` yields `httpStatus: null` — even though the server did return a real status. Measured against a real 404 on `google.com`: the default probe records `null`, and the same image probed through a backend records `404`.
+
+A server is not bound by CORS, and can use `GET` on origins that reject `HEAD`. `probeStatus` hands you that request; the library keeps the timeout, the abort-on-dispose, and the one-probe-per-unique-URL guarantee. It defines no wire format — the response shape below is yours to change.
+
+```ts
+initBrokenImageReporter({
+  probeStatus: async (url, signal) => {
+    const res = await fetch(`/api/probe?url=${encodeURIComponent(url)}`, { signal });
+    if (!res.ok) return null; // the proxy failed; the image's status stays unknown
+    const { status } = await res.json();
+    return status;
+  },
+});
+```
+
+Forward the `signal`. Without it, a hung origin keeps the request alive after the reporter is disposed.
+
+> [!WARNING]
+> **An endpoint that fetches an arbitrary client-supplied URL is an SSRF hole.** Anyone can point it at `http://169.254.169.254/` or an internal host and read the response through your server. Allowlist the origins you actually serve images from.
+
+```ts
+// Express. The allowlist is the whole point.
+const ALLOWED = new Set(['https://cdn.example.com', 'https://images.example.com']);
+
+app.get('/api/probe', async (req, res) => {
+  let origin;
+  try {
+    origin = new URL(String(req.query.url)).origin;
+  } catch {
+    return res.status(400).end();
+  }
+  if (!ALLOWED.has(origin)) return res.status(400).end();
+
+  try {
+    const upstream = await fetch(String(req.query.url), { method: 'GET' });
+    res.json({ status: upstream.status });
+  } catch {
+    res.json({ status: null }); // unreachable, not a status
+  }
+});
+```
+
+Because you own the function, `probeStatus` also covers cases that have nothing to do with CORS: adding an auth header, batching probes, or reading a status your CDN already exposes on another endpoint.
 
 ### `useBrokenImageReport(store?): UseBrokenImageReportResult`
 
@@ -154,9 +201,9 @@ Both were confirmed against Chrome, alongside the cases that *do* work: a plain 
 
 ## Caveats worth knowing before you rely on this
 
-**`httpStatus` is `null` more often than you'd expect.** The `HEAD` probe is a `fetch`, so it obeys CORS. If the image origin does not send `Access-Control-Allow-Origin`, the fetch rejects and the status is unknowable — *even though the server did return a real status*. In practice you get a status from your own origin and from CORS-enabled buckets (typical for S3/GCS/CloudFront with a CORS policy), and `null` from most third-party hosts. `null` still means "this image is broken"; it just doesn't tell you why.
+**`httpStatus` is `null` more often than you'd expect.** The `HEAD` probe is a `fetch`, so it obeys CORS. If the image origin does not send `Access-Control-Allow-Origin`, the fetch rejects and the status is unknowable — *even though the server did return a real status*. In practice you get a status from your own origin and from CORS-enabled buckets (typical for S3/GCS/CloudFront with a CORS policy), and `null` from most third-party hosts. `null` still means "this image is broken"; it just doesn't tell you why. Route the probe through your own backend with [`probeStatus`](#recovering-the-status-of-cross-origin-images) to lift this.
 
-**Some servers reject `HEAD` itself.** A CDN or origin that answers `HEAD` with `405 Method Not Allowed` gives you `httpStatus: 405` for an image that is really a 404. The status describes the probe, not the original image request — treat an unexpected `405` as "unknown", not as the reason the image broke.
+**Some servers reject `HEAD` itself.** A CDN or origin that answers `HEAD` with `405 Method Not Allowed` gives you `httpStatus: 405` for an image that is really a 404. The status describes the probe, not the original image request — treat an unexpected `405` as "unknown", not as the reason the image broke. A `probeStatus` that issues `GET` from your backend avoids this too.
 
 **Images that fail before you call `init` are lost.** The listener only hears events fired after it is attached. A `<script type="module">` is deferred, so images already in the server-rendered HTML can fail while the bundle is still loading — and those failures are never recorded. Call `initBrokenImageReporter()` from the earliest script you control. Images rendered by your framework after hydration are never at risk.
 

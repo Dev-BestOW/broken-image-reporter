@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `probeStatus`: recover an image's HTTP status your own way, typically by routing the
+  probe through your backend, which is not bound by CORS and may use `GET` where an
+  origin rejects `HEAD`. The library keeps the timeout, the abort-on-dispose, and the
+  one-probe-per-unique-URL guarantee, and defines no wire format. Verified against a
+  real cross-origin 404: the built-in probe records `null`, this records `404`.
+
+  The endpoint it implies is an SSRF hole unless you allowlist image origins. The
+  README ships a reference implementation that does.
+
 ## 0.2.0
 
 ### Added

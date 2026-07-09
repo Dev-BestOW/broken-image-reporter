@@ -5,6 +5,19 @@ import {
   type BrokenImageStore,
 } from './store';
 
+/**
+ * Recovers the HTTP status of a URL that failed to load as an image, or `null` when
+ * the status cannot be determined.
+ *
+ * Receives an `AbortSignal` that fires on `probeTimeoutMs` and on dispose. Forward it
+ * to whatever request you make, or a hung origin keeps the request alive after the
+ * reporter is gone. Throwing is treated as `null`.
+ */
+export type ProbeStatus = (
+  url: string,
+  signal: AbortSignal,
+) => Promise<number | null>;
+
 export interface InitBrokenImageReporterOptions {
   /**
    * Called once per unique failing URL, after the record is committed to the store.
@@ -24,9 +37,39 @@ export interface InitBrokenImageReporterOptions {
    *
    * The probe can only read a status when the origin serves CORS headers; otherwise
    * `httpStatus` is `null`. An origin that rejects `HEAD` reports `405`, which
-   * describes the probe rather than the original image request. @default true
+   * describes the probe rather than the original image request.
+   *
+   * Set to `false` to never probe at all. This also disables `probeStatus`. @default true
    */
   probeHttpStatus?: boolean;
+
+  /**
+   * Recover the status some other way than the built-in `HEAD` request.
+   *
+   * The built-in probe is a browser `fetch`, so it obeys CORS: for an image on an
+   * origin that sends no `Access-Control-Allow-Origin`, the status is unknowable and
+   * `httpStatus` is `null` — even though the server did return a real status. Routing
+   * the probe through your own backend lifts that restriction, because a server is not
+   * bound by CORS and can use `GET` on origins that reject `HEAD`.
+   *
+   * This library deliberately defines no wire format. You own the request and the
+   * response shape; it keeps the timeout, the abort-on-dispose, and the one-probe-per-
+   * unique-URL guarantee.
+   *
+   * **An endpoint that fetches an arbitrary client-supplied URL is an SSRF hole.**
+   * Allowlist the image origins you expect, and never let it reach internal hosts.
+   *
+   * @example
+   * ```ts
+   * probeStatus: async (url, signal) => {
+   *   const res = await fetch(`/api/probe?url=${encodeURIComponent(url)}`, { signal });
+   *   if (!res.ok) return null; // the proxy itself failed; the image's status is unknown
+   *   const { status } = await res.json();
+   *   return status;
+   * }
+   * ```
+   */
+  probeStatus?: ProbeStatus;
 
   /**
    * Abandon a status probe that has not responded within this many milliseconds,
@@ -65,19 +108,29 @@ function generateId(): string {
 }
 
 /**
- * Recover the HTTP status of a URL that failed to load as an image.
- *
- * Resolves to `null` when the status is unknowable — a DNS/network failure, a
- * cross-origin response without `Access-Control-Allow-Origin` (the fetch rejects
- * regardless of the status the server actually sent), a timeout, or disposal.
- *
- * The request is aborted both on timeout and when the reporter is disposed, so a
- * hung origin cannot keep a `fetch` (or the page) alive after cleanup.
+ * The default probe: re-request the image with `HEAD` and read the status off the
+ * response. Subject to CORS, which is why `probeStatus` exists.
  */
-async function probeStatus(
+const headProbe: ProbeStatus = async (url, signal) => {
+  const res = await fetch(url, { method: 'HEAD', signal });
+  return res.status;
+};
+
+/**
+ * Run a probe under a timeout, and resolve to `null` when the status is unknowable —
+ * a DNS/network failure, a cross-origin response without `Access-Control-Allow-Origin`
+ * (the fetch rejects regardless of the status the server actually sent), a timeout,
+ * disposal, or a probe that threw.
+ *
+ * The signal fires on both timeout and dispose, so a hung origin cannot keep a request
+ * (or the page) alive after cleanup — provided the probe forwards it.
+ */
+async function runProbe(
   url: string,
   timeoutMs: number,
   disposeSignal: AbortSignal,
+  probe: ProbeStatus,
+  debug: boolean,
 ): Promise<number | null> {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -86,9 +139,12 @@ async function probeStatus(
   const timer = setTimeout(abort, timeoutMs);
 
   try {
-    const res = await fetch(url, { method: 'HEAD', signal: controller.signal });
-    return res.status;
-  } catch {
+    const status = await probe(url, controller.signal);
+    // A custom probe is user code: it may resolve to anything at runtime, whatever
+    // its type says. Only a number is a status.
+    return typeof status === 'number' ? status : null;
+  } catch (error) {
+    if (debug) console.warn('[broken-image] probe failed', url, error);
     return null;
   } finally {
     clearTimeout(timer);
@@ -126,6 +182,7 @@ export function initBrokenImageReporter(
   const {
     onError,
     probeHttpStatus = true,
+    probeStatus = headProbe,
     probeTimeoutMs = 5000,
     verifyDelayMs = 500,
     ignore,
@@ -140,7 +197,7 @@ export function initBrokenImageReporter(
   // Aborts every in-flight probe at once when the reporter is disposed.
   const disposeController = new AbortController();
   // Claimed before probing, not after: a URL broken in fifty places must cost
-  // exactly one HEAD request, and the store can only dedupe once the probe returns.
+  // exactly one probe, and the store can only dedupe once the probe returns.
   const claimedUrls = new Set<string>();
   let disposed = false;
 
@@ -172,7 +229,13 @@ export function initBrokenImageReporter(
       finish(null);
       return;
     }
-    void probeStatus(url, probeTimeoutMs, disposeController.signal).then(finish);
+    void runProbe(
+      url,
+      probeTimeoutMs,
+      disposeController.signal,
+      probeStatus,
+      debug,
+    ).then(finish);
   };
 
   const handleError = (event: Event) => {

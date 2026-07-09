@@ -4,7 +4,7 @@
  */
 
 export { initBrokenImageReporter } from './reporter';
-export type { InitBrokenImageReporterOptions } from './reporter';
+export type { InitBrokenImageReporterOptions, ProbeStatus } from './reporter';
 
 export { brokenImageStore, createBrokenImageStore } from './store';
 export type {

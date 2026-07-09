@@ -235,6 +235,126 @@ describe('initBrokenImageReporter', () => {
     expect(listeners).toHaveLength(0);
   });
 
+  it('delegates to probeStatus instead of issuing a HEAD request', async () => {
+    const store = createBrokenImageStore();
+    const probeStatus = vi.fn(async () => 404);
+    initBrokenImageReporter({ store, verifyDelayMs: 10, probeStatus });
+
+    emit(new FakeImage({ src: 'https://third-party.test/cors-blocked.png' }));
+    await settle();
+
+    // The built-in HEAD probe would have recorded null here, since the stubbed fetch
+    // rejects for this URL. Routing through a proxy recovers the real status.
+    expect(store.getSnapshot().errors[0]?.httpStatus).toBe(404);
+    expect(probeStatus).toHaveBeenCalledTimes(1);
+    expect(probes).toHaveLength(0);
+  });
+
+  it('records an unknowable status when probeStatus throws', async () => {
+    const store = createBrokenImageStore();
+    initBrokenImageReporter({
+      store,
+      verifyDelayMs: 10,
+      probeStatus: async () => {
+        throw new Error('proxy is down');
+      },
+    });
+
+    emit(new FakeImage({ src: 'https://cdn.test/x.png' }));
+    await settle();
+
+    expect(store.getSnapshot().count).toBe(1);
+    expect(store.getSnapshot().errors[0]?.httpStatus).toBeNull();
+  });
+
+  it('rejects a non-numeric status from probeStatus', async () => {
+    const store = createBrokenImageStore();
+    initBrokenImageReporter({
+      store,
+      verifyDelayMs: 10,
+      // User code can resolve to anything at runtime, whatever its type claims.
+      probeStatus: async () => '404' as unknown as number,
+    });
+
+    emit(new FakeImage({ src: 'https://cdn.test/x.png' }));
+    await settle();
+
+    expect(store.getSnapshot().errors[0]?.httpStatus).toBeNull();
+  });
+
+  it('aborts a custom probe on dispose, as it does the built-in one', async () => {
+    const store = createBrokenImageStore();
+    let aborted = false;
+    const dispose = initBrokenImageReporter({
+      store,
+      verifyDelayMs: 10,
+      probeStatus: (_url, signal) =>
+        new Promise(resolve => {
+          signal.addEventListener('abort', () => {
+            aborted = true;
+            resolve(null);
+          });
+        }),
+    });
+
+    emit(new FakeImage({ src: 'https://cdn.test/hangs.png' }));
+    await new Promise(resolve => setTimeout(resolve, 25)); // the probe is now in flight
+    dispose();
+    await settle();
+
+    expect(aborted).toBe(true);
+    expect(store.getSnapshot().count).toBe(0);
+  });
+
+  it('aborts a custom probe that outlives probeTimeoutMs', async () => {
+    const store = createBrokenImageStore();
+    initBrokenImageReporter({
+      store,
+      verifyDelayMs: 10,
+      probeTimeoutMs: 20,
+      probeStatus: (_url, signal) =>
+        new Promise(resolve => {
+          signal.addEventListener('abort', () => resolve(null));
+        }),
+    });
+
+    emit(new FakeImage({ src: 'https://cdn.test/hangs.png' }));
+    await settle();
+
+    expect(store.getSnapshot().count).toBe(1);
+    expect(store.getSnapshot().errors[0]?.httpStatus).toBeNull();
+  });
+
+  it('never probes when probeHttpStatus is false, even with a probeStatus', async () => {
+    const store = createBrokenImageStore();
+    const probeStatus = vi.fn(async () => 404);
+    initBrokenImageReporter({
+      store,
+      verifyDelayMs: 10,
+      probeHttpStatus: false,
+      probeStatus,
+    });
+
+    emit(new FakeImage({ src: 'https://cdn.test/x.png' }));
+    await settle();
+
+    expect(probeStatus).not.toHaveBeenCalled();
+    expect(store.getSnapshot().errors[0]?.httpStatus).toBeNull();
+  });
+
+  it('probes a repeated URL exactly once through a custom probe', async () => {
+    const store = createBrokenImageStore();
+    const probeStatus = vi.fn(async () => 403);
+    initBrokenImageReporter({ store, verifyDelayMs: 10, probeStatus });
+
+    emit(new FakeImage({ src: 'https://cdn.test/dup.png' }));
+    emit(new FakeImage({ src: 'https://cdn.test/dup.png' }));
+    await settle();
+
+    expect(probeStatus).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().count).toBe(1);
+  });
+
   it('no-ops during SSR', () => {
     vi.stubGlobal('window', undefined);
     const dispose = initBrokenImageReporter({ store: createBrokenImageStore() });
