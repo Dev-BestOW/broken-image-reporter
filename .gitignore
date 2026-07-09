@@ -14,3 +14,7 @@ npm-debug.log*
 
 # Local tooling state
 .omc/
+
+# Playwright
+playwright-report/
+test-results/
