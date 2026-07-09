@@ -96,11 +96,15 @@ async function probeStatus(
 }
 
 /**
- * Detect every `<img>` that fails to load anywhere on the page.
+ * Detect `<img>` tags that fail to load anywhere in the main document.
  *
  * Image `error` events do not bubble, so this listens in the **capture** phase on
  * `window` — that catches images rendered by any component or library, including
  * ones that never wire up an `onError` prop.
+ *
+ * It does not catch images inside a shadow root (`error` is `composed: false`, so
+ * it never reaches `window`) or CSS `background-image` failures (which fire no
+ * event at all).
  *
  * Safe to call on the server: it no-ops and returns a no-op disposer.
  *

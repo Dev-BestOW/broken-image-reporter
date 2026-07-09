@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/broken-image-reporter.svg)](https://www.npmjs.com/package/broken-image-reporter)
 [![license](https://img.shields.io/npm/l/broken-image-reporter.svg)](./LICENSE)
 
-Detect every broken `<img>` on the page — including ones rendered by components you don't control — recover the HTTP status behind the failure, and report it wherever you like.
+Detect broken `<img>` tags on the page — including ones rendered by components you don't control — recover the HTTP status behind the failure, and report it wherever you like.
 
 Zero runtime dependencies. The core is framework-agnostic; React is an optional peer dependency needed only for the hook at `broken-image-reporter/react`.
 
@@ -13,13 +13,15 @@ npm install broken-image-reporter
 
 ## Why not `onError`?
 
-An `<img>` `error` event **does not bubble**. A handler on `document` never sees it, so the usual advice is to put an `onError` prop on every image — which only works for images your own code renders. Design-system wrappers, rich-text content, third-party embeds, and `background-image`-adjacent `<img>` tags all slip through.
+An `<img>` `error` event **does not bubble**. A handler on `document` never sees it, so the usual advice is to put an `onError` prop on every image — which only works for images your own code renders. Design-system wrappers, rich-text content, and third-party embeds all slip through.
 
 This library listens on `window` in the **capture** phase, which does see them:
 
 ```ts
 window.addEventListener('error', handler, /* useCapture */ true);
 ```
+
+That covers any `<img>` in the main document, whoever rendered it, including a `<picture>` whose `<source>` fails — the failing URL is read from `currentSrc`, so it is the one the browser actually tried. It does **not** cover images inside a shadow root, or CSS `background-image`. See [what this cannot see](#what-this-cannot-see).
 
 It also solves two problems you hit immediately afterwards.
 
@@ -134,6 +136,16 @@ interface BrokenImageRecord {
   alt: string | null;
 }
 ```
+
+## What this cannot see
+
+The capture-phase listener is not a universal net. Two categories of broken image never reach it, and no option turns them on today.
+
+**Images inside a shadow root.** An `error` event is `composed: false`, so it does not cross a shadow boundary and `window` is never on its propagation path. If your design system ships web components that render `<img>` in a shadow root, those failures are invisible to this library — including closed roots, which nothing outside can observe at all. Ordinary framework components are unaffected; this is specifically about `attachShadow`.
+
+**CSS `background-image`.** A background that 404s fires no `error` event anywhere. There is nothing for a listener to hear. Detecting these needs a different mechanism entirely — walking computed styles and probing each URL — which this library does not do.
+
+Both were confirmed against Chrome, alongside the cases that *do* work: a plain `<img>`, and a `<picture>` whose `<source>` fails.
 
 ## Caveats worth knowing before you rely on this
 
