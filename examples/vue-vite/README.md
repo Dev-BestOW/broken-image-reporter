@@ -43,6 +43,8 @@ cross-origin ones are real internet URLs, so they are not.
 | `<AbortedOnRerender>` | not reported |
 | `<UnmountedBeforeLoad>` | not reported |
 
+Reported rows carry a `selector` too, anchored here at Vue's `#app` mount point.
+
 The last two matter most, and they are not a React problem. Vue patches an `<img>`'s
 `src` on re-render and detaches it on `v-if`, so the browser aborts the in-flight
 request and fires `error` in both cases — exactly as React does. Neither is a broken

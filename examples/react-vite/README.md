@@ -33,6 +33,8 @@ The cross-origin ones are real internet URLs, so they are not.
 | `<AbortedOnRerender>` | not reported |
 | `<UnmountedBeforeLoad>` | not reported |
 
+Every reported row also carries a `selector` — here `#root > main > div > div:nth-of-type(3) > img`, anchored at Vite's `#root`. Nothing on this page has an `id` or a `data-testid` near the images, which is the worst case for readability; give a real gallery an `id` and the path shortens to something you can paste into devtools.
+
 Three of these rows are the whole point of the library:
 
 **`/api/head-405.png` really is a 404**, but its origin answers `HEAD` with `405`. The

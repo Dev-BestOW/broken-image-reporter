@@ -72,6 +72,7 @@ export function App() {
           <tr>
             <th>url</th>
             <th>httpStatus</th>
+            <th>selector</th>
             <th>alt</th>
           </tr>
         </thead>
@@ -80,6 +81,7 @@ export function App() {
             <tr key={e.id}>
               <td>{e.url}</td>
               <td>{e.httpStatus ?? 'null'}</td>
+              <td><code>{e.selector ?? '—'}</code></td>
               <td>{e.alt ?? '—'}</td>
             </tr>
           ))}
