@@ -1,3 +1,4 @@
+import { cssPath } from './selector';
 import {
   brokenImageStore as defaultStore,
   type BrokenImageRecord,
@@ -153,6 +154,9 @@ export function initBrokenImageReporter(
       pageUrl: window.location.href,
       timestamp: new Date().toISOString(),
       alt: target.alt || null,
+      // Read now, while the element is still in the document. The probe that follows
+      // is async, and by the time it resolves the element may have been unmounted.
+      selector: cssPath(target),
     };
 
     const finish = (httpStatus: number | null) => {

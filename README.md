@@ -134,8 +134,13 @@ interface BrokenImageRecord {
   pageUrl: string;
   timestamp: string; // ISO-8601
   alt: string | null;
+  selector: string | null; // e.g. '#gallery > figure > img'
 }
 ```
+
+`selector` is a CSS path locating the element, captured while it is still in the document. A URL alone tells you an image is broken; the same URL rendered by three templates gives you nowhere to start, and `alt` is empty on exactly the decorative images nobody notices.
+
+The path is anchored at the nearest ancestor with an `id`, a `data-testid`, `data-test-id`, or `data-cy`, so it survives unrelated markup changes elsewhere on the page. Without such an ancestor it stops after six segments and is a *locator hint*, not an identity — `querySelector` may match an earlier element. It is `null` when the element cannot be described.
 
 ## What this cannot see
 
@@ -152,6 +157,8 @@ Both were confirmed against Chrome, alongside the cases that *do* work: a plain 
 **`httpStatus` is `null` more often than you'd expect.** The `HEAD` probe is a `fetch`, so it obeys CORS. If the image origin does not send `Access-Control-Allow-Origin`, the fetch rejects and the status is unknowable — *even though the server did return a real status*. In practice you get a status from your own origin and from CORS-enabled buckets (typical for S3/GCS/CloudFront with a CORS policy), and `null` from most third-party hosts. `null` still means "this image is broken"; it just doesn't tell you why.
 
 **Some servers reject `HEAD` itself.** A CDN or origin that answers `HEAD` with `405 Method Not Allowed` gives you `httpStatus: 405` for an image that is really a 404. The status describes the probe, not the original image request — treat an unexpected `405` as "unknown", not as the reason the image broke.
+
+**Images that fail before you call `init` are lost.** The listener only hears events fired after it is attached. A `<script type="module">` is deferred, so images already in the server-rendered HTML can fail while the bundle is still loading — and those failures are never recorded. Call `initBrokenImageReporter()` from the earliest script you control. Images rendered by your framework after hydration are never at risk.
 
 **The probe is a second request.** It is issued once per unique URL, after the failure is confirmed. Set `probeHttpStatus: false` if that's not acceptable.
 

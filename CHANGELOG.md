@@ -5,9 +5,22 @@ All notable changes to this project are documented here. This project adheres to
 
 ## Unreleased
 
-- Documentation only. Corrected the claim that the reporter sees every image on the
-  page. It sees `<img>` tags in the main document; images inside a shadow root and
-  CSS `background-image` failures are out of reach, and the README now says so.
+### Added
+
+- `BrokenImageRecord.selector`: a CSS path locating the broken image, anchored at the
+  nearest ancestor with an `id` or a test id. A URL says an image is broken; this says
+  where to go and fix it. Exported as a new trailing CSV column.
+
+  **Breaking for anyone constructing a `BrokenImageRecord` by hand**, such as when
+  seeding a store in a test. The field is required.
+
+### Changed
+
+- Corrected the claim that the reporter sees every image on the page. It sees `<img>`
+  tags in the main document; images inside a shadow root and CSS `background-image`
+  failures are out of reach, and the README now says so.
+- Documented that images failing before `initBrokenImageReporter()` runs are never
+  recorded, which bites server-rendered HTML behind a deferred module script.
 
 ## 0.1.0
 

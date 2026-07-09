@@ -20,6 +20,13 @@ export interface BrokenImageRecord {
   timestamp: string;
   /** The image's `alt` attribute, when present. */
   alt: string | null;
+  /**
+   * A CSS path locating the element, e.g. `#gallery > figure > img`. A signpost for
+   * whoever has to fix the image, not an identity: it is anchored at the nearest
+   * ancestor with an `id` or test id, and truncated past six segments, so it may
+   * match an earlier element. `null` when the element could not be described.
+   */
+  selector: string | null;
 }
 
 export interface BrokenImageState {
@@ -108,7 +115,7 @@ export function createBrokenImageStore(
     },
 
     exportAsCsv() {
-      const header = 'id,url,httpStatus,pageUrl,timestamp,alt';
+      const header = 'id,url,httpStatus,pageUrl,timestamp,alt,selector';
       const rows = state.errors.map(e =>
         [
           csvField(e.id),
@@ -117,6 +124,7 @@ export function createBrokenImageStore(
           csvField(e.pageUrl),
           csvField(e.timestamp),
           csvField(e.alt),
+          csvField(e.selector),
         ].join(','),
       );
       return [header, ...rows].join('\n');

@@ -13,6 +13,7 @@ const record = (url: string, httpStatus: number | null = 404): BrokenImageRecord
   pageUrl: 'https://example.test/page',
   timestamp: '2026-01-01T00:00:00.000Z',
   alt: null,
+  selector: null,
 });
 
 /**

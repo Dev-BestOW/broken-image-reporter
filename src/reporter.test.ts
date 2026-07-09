@@ -9,6 +9,7 @@ import { initBrokenImageReporter } from './reporter';
  * delayed re-check.
  */
 class FakeImage {
+  readonly tagName = 'IMG';
   src: string;
   currentSrc: string;
   complete: boolean;
@@ -101,6 +102,9 @@ describe('initBrokenImageReporter', () => {
       httpStatus: 403,
       alt: 'hero',
       pageUrl: 'https://example.test/page',
+      // Ancestry is what `cssPath` builds a path from, and this stand-in has none.
+      // `selector.test.ts` covers the paths a real DOM produces.
+      selector: 'img',
     });
     expect(onError).toHaveBeenCalledTimes(1);
   });
@@ -247,6 +251,7 @@ describe('createBrokenImageStore', () => {
     pageUrl: '',
     timestamp: '',
     alt: null,
+    selector: null,
   });
 
   it('caches getServerSnapshot, which React requires to avoid an infinite loop', () => {
@@ -279,6 +284,15 @@ describe('createBrokenImageStore', () => {
 
     expect(stays).toHaveBeenCalledTimes(1);
     expect(leaves).not.toHaveBeenCalled();
+  });
+
+  it('exports the selector as a CSV column', () => {
+    const store = createBrokenImageStore();
+    store.addError({ ...record('https://a.test/x.png'), selector: '#gallery > img' });
+
+    const [header, row] = store.exportAsCsv().split('\n');
+    expect(header).toBe('id,url,httpStatus,pageUrl,timestamp,alt,selector');
+    expect(row).toContain('"#gallery > img"');
   });
 
   it('escapes embedded quotes in CSV output', () => {
