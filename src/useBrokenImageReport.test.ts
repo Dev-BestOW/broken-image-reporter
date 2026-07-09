@@ -15,6 +15,19 @@ const record = (url: string, httpStatus: number | null = 404): BrokenImageRecord
   alt: null,
 });
 
+/**
+ * jsdom's `Blob` implements neither `text()` nor `arrayBuffer()`, so read it the
+ * way a browser without those methods would.
+ */
+function readBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
 /** Blobs handed to `URL.createObjectURL`, in call order. */
 let objectUrls: Blob[];
 /** Anchors that were clicked, captured before `download()` discards them. */
@@ -149,7 +162,7 @@ describe('useBrokenImageReport', () => {
       { href: 'blob:mock/1', download: 'broken-images.csv' },
     ]);
     expect(objectUrls[0]?.type).toBe('text/csv');
-    await expect(objectUrls[0]?.text()).resolves.toContain('https://cdn.test/a.png');
+    await expect(readBlob(objectUrls[0]!)).resolves.toContain('https://cdn.test/a.png');
   });
 
   // `click()` schedules the download rather than performing it. Revoking on the
@@ -191,7 +204,7 @@ describe('useBrokenImageReport', () => {
 
     expect(clicks[0]?.download).toBe('report.json');
     expect(objectUrls[0]?.type).toBe('application/json');
-    const parsed = JSON.parse((await objectUrls[0]!.text()) ?? '');
+    const parsed = JSON.parse(await readBlob(objectUrls[0]!));
     expect(parsed[0].url).toBe('https://cdn.test/a.png');
   });
 });
