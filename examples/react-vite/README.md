@@ -35,6 +35,26 @@ The cross-origin ones are real internet URLs, so they are not.
 
 Every reported row also carries a `selector` — here `#root > main > div > div:nth-of-type(3) > img`, anchored at Vite's `#root`. Nothing on this page has an `id` or a `data-testid` near the images, which is the worst case for readability; give a real gallery an `id` and the path shortens to something you can paste into devtools.
 
+## The two probes, side by side
+
+`main.tsx` starts **two** reporters over two stores. They see the same failures; only the way they recover the status differs. The table prints both columns:
+
+| Image | `HEAD` probe | via `/api/probe` |
+| --- | --- | --- |
+| `/api/expired.png` | `403` | `403` |
+| `/api/missing.png` | `404` | `404` |
+| `/api/head-405.png` | `405` | **`404`** |
+| `https://www.google.com/nope-xyz.png` | `null` | **`404`** |
+| `https://nonexistent.invalid/a.png` | `null` | `null` |
+
+The two bold cells are what `probeStatus` buys. Google really does answer `404`, but the browser's `HEAD` probe obeys CORS and never sees it; a server does. The `405` trap dissolves for the same reason — the proxy issues `GET`, which that endpoint answers honestly.
+
+The last row stays `null` in both columns, and should: an unresolvable host is broken, and its status is genuinely unknowable.
+
+`/api/probe` lives in `vite.config.ts`. **It allowlists origins**, because an endpoint that fetches an arbitrary client-supplied URL is an SSRF hole. Copy the allowlist, not just the fetch.
+
+## Three rows worth staring at
+
 Three of these rows are the whole point of the library:
 
 **`/api/head-405.png` really is a 404**, but its origin answers `HEAD` with `405`. The

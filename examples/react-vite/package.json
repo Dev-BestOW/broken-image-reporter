@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "broken-image-reporter": "^0.2.0",
+    "broken-image-reporter": "^0.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

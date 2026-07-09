@@ -7,7 +7,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "broken-image-reporter": "^0.2.0",
+    "broken-image-reporter": "^0.3.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {

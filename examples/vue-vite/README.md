@@ -45,6 +45,8 @@ cross-origin ones are real internet URLs, so they are not.
 
 Reported rows carry a `selector` too, anchored here at Vue's `#app` mount point.
 
+`main.ts` starts **two** reporters over two stores, so the table can show the built-in `HEAD` probe next to one routed through `/api/probe` on the dev server. The cross-origin image reads `null` in the first column and `404` in the second; the `405` trap reads `405` and `404`. See the React example's README for why, and note the origin allowlist in `vite.config.ts` — an endpoint that fetches an arbitrary client-supplied URL is an SSRF hole.
+
 The last two matter most, and they are not a React problem. Vue patches an `<img>`'s
 `src` on re-render and detaches it on `v-if`, so the browser aborts the in-flight
 request and fires `error` in both cases — exactly as React does. Neither is a broken

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useBrokenImageReport } from 'broken-image-reporter/react';
+import { directStore, proxiedStore } from './reporters';
 
 /**
  * Starts on a slow endpoint, then swaps to a valid image 300ms later.
@@ -36,14 +37,30 @@ const CASES = [
 ];
 
 export function App() {
-  const { count, errors, clearErrors, toCsv } = useBrokenImageReport();
+  const { count, errors, clearErrors, toCsv } = useBrokenImageReport(directStore);
+  const proxied = useBrokenImageReport(proxiedStore);
+
+  // Both reporters see every failure; only their probes differ. Key by URL to line
+  // the two statuses up.
+  const proxiedStatus = new Map(proxied.errors.map(e => [e.url, e.httpStatus]));
+
+  const clearBoth = () => {
+    clearErrors();
+    proxied.clearErrors();
+  };
 
   return (
     <main>
       <h1>broken-image-reporter demo</h1>
       <p>
-        Installed from npm. The reporter was started in <code>main.tsx</code>; none of the
-        images below have an <code>onError</code> prop.
+        Installed from npm. The reporters were started in <code>main.tsx</code>; none of
+        the images below have an <code>onError</code> prop.
+      </p>
+      <p>
+        Two reporters watch the same page. One uses the built-in <code>HEAD</code> probe,
+        which the browser subjects to CORS. The other passes{' '}
+        <code>probeStatus</code> and asks <code>/api/probe</code> on this dev server,
+        which is not bound by CORS and issues <code>GET</code>.
       </p>
 
       <div className="row">
@@ -64,14 +81,15 @@ export function App() {
       </div>
 
       <h2 data-testid="count">Reported: {count}</h2>
-      <button onClick={clearErrors}>Clear</button>
+      <button onClick={clearBoth}>Clear</button>
       <button onClick={() => console.log(toCsv())}>Log CSV</button>
 
       <table>
         <thead>
           <tr>
             <th>url</th>
-            <th>httpStatus</th>
+            <th>HEAD probe</th>
+            <th>via /api/probe</th>
             <th>selector</th>
             <th>alt</th>
           </tr>
@@ -81,6 +99,7 @@ export function App() {
             <tr key={e.id}>
               <td>{e.url}</td>
               <td>{e.httpStatus ?? 'null'}</td>
+              <td>{proxiedStatus.get(e.url) ?? 'null'}</td>
               <td><code>{e.selector ?? '—'}</code></td>
               <td>{e.alt ?? '—'}</td>
             </tr>
