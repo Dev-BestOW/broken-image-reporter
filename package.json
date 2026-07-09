@@ -1,6 +1,6 @@
 {
   "name": "broken-image-reporter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Detect broken <img> tags on the page, recover the HTTP status, and report it. Zero dependencies, framework-agnostic, with an optional React hook.",
   "keywords": [
     "image",
