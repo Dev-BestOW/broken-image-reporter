@@ -80,9 +80,12 @@ function BrokenImageBadge() {
 
 The hook is headless on purpose — bring your own UI, in your own design system. Render it behind `import.meta.env.DEV` and you have an in-app devtool; wire `onError` to your backend and you have production monitoring.
 
-### Example
+### Examples
 
-[`examples/react-vite`](./examples/react-vite) is a runnable page covering every case: a 403, a 404, an origin that rejects `HEAD`, cross-origin failures whose status cannot be recovered, and two `error` events that are *not* broken images.
+Two runnable pages covering every case: a 403, a 404, an origin that rejects `HEAD`, cross-origin failures whose status cannot be recovered, and two `error` events that are *not* broken images.
+
+- [`examples/react-vite`](./examples/react-vite) — the hook.
+- [`examples/vue-vite`](./examples/vue-vite) — no hook, no Vue package. Binding the store to Vue's reactivity takes about twenty lines, and the same shape works for Svelte, Solid, or vanilla JS.
 
 ## API
 
