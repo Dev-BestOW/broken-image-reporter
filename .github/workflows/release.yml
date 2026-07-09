@@ -22,9 +22,9 @@ jobs:
       id-token: write # mints the OIDC token npm exchanges for publish rights
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           # Trusted publishing needs npm >=11.5.1, and Node 24 bundles npm 11.x.
           # Do not upgrade npm globally here: overwriting the tool-cache npm in place
