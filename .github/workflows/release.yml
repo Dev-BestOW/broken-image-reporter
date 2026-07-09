@@ -26,12 +26,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Trusted publishing needs Node >=22.14.0, above this package's own >=18 floor.
-          node-version: 22
+          # Trusted publishing needs npm >=11.5.1, and Node 24 bundles npm 11.x.
+          # Do not upgrade npm globally here: overwriting the tool-cache npm in place
+          # leaves a broken dependency tree, and `npm publish` then dies looking for
+          # `sigstore` while generating provenance. This package's own floor is >=18.
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
-      # actions/setup-node ships an npm older than the 11.5.1 that understands OIDC.
-      - run: npm install -g npm@latest
+      - run: npm --version
 
       - run: npm ci
 
